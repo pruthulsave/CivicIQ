@@ -15,10 +15,14 @@ export const api = {
       for (let [key, value] of formData.entries()) {
         if (key === 'image' && value instanceof File) {
           payload[key] = await fileToBase64(value);
+        } else if (['latitude', 'longitude', 'accuracy'].includes(key)) {
+          payload[key] = Number(value);
         } else {
           payload[key] = value;
         }
       }
+      console.log("FINAL PAYLOAD", payload);
+      console.log(typeof payload.longitude, payload.longitude);
 
       const response = await fetch(`${API_URL}/complaints`, {
         method: 'POST',
@@ -47,10 +51,14 @@ export const api = {
       for (let [key, value] of formData.entries()) {
         if (key === 'image' && value instanceof File) {
           payload[key] = await fileToBase64(value);
+        } else if (['latitude', 'longitude', 'accuracy'].includes(key)) {
+          payload[key] = Number(value);
         } else {
           payload[key] = value;
         }
       }
+      console.log("FINAL PAYLOAD", payload);
+      console.log(typeof payload.longitude, payload.longitude);
 
       const response = await fetch(`${API_URL}/complaints/precheck`, {
         method: 'POST',

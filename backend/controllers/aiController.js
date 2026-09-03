@@ -14,6 +14,7 @@ const detectPothole = (req, res) => {
 
   let outputData = '';
   let errorData = '';
+  let responseSent = false;
 
   pythonProcess.stdout.on('data', (data) => {
     outputData += data.toString();
@@ -23,11 +24,22 @@ const detectPothole = (req, res) => {
     errorData += data.toString();
   });
 
+  pythonProcess.on('error', (err) => {
+    console.error('Failed to start Python process:', err);
+    if (!responseSent) {
+      responseSent = true;
+      return res.status(500).json({ error: 'Internal server error: Python process failed to start' });
+    }
+  });
+
   pythonProcess.on('close', (code) => {
     // delete the temporary uploaded file
     fs.unlink(imagePath, (err) => {
       if (err) console.error('Error deleting temp image:', err);
     });
+
+    if (responseSent) return;
+    responseSent = true;
 
     if (code !== 0) {
       console.error('Python script error:', errorData);
@@ -43,10 +55,10 @@ const detectPothole = (req, res) => {
         return res.status(500).json({ error: result.error });
       }
 
-      res.status(200).json(result);
+      return res.status(200).json(result);
     } catch (err) {
       console.error('Failed to parse Python output:', outputData);
-      res.status(500).json({ error: 'Failed to parse detection results' });
+      return res.status(500).json({ error: 'Failed to parse detection results' });
     }
   });
 };

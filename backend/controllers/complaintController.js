@@ -45,6 +45,14 @@ const precheckComplaint = async (req, res) => {
       return res.status(400).json({ message: 'Please provide issueType, latitude, and longitude' });
     }
 
+    if (typeof latitude !== 'number' || typeof longitude !== 'number') {
+      return res.status(400).json({ message: 'Invalid payload: latitude and longitude must be numbers' });
+    }
+
+    if (req.body.accuracy !== undefined && typeof req.body.accuracy !== 'number') {
+      return res.status(400).json({ message: 'Invalid payload: accuracy must be a number' });
+    }
+
     let suggestion = null;
     if (description && description.length > 5) {
        suggestion = await getCategorySuggestion(description, issueType);
@@ -74,17 +82,36 @@ const precheckComplaint = async (req, res) => {
           resultData += data.toString();
         });
 
-        pythonProcess.stdin.write(JSON.stringify(payload));
-        pythonProcess.stdin.end();
+        pythonProcess.on('error', (err) => {
+          console.error('Python process error:', err);
+        });
+
+        pythonProcess.on('exit', (code) => {
+          if (code !== 0) console.error('Python process exited with code:', code);
+        });
+
+        if (pythonProcess.stdin && !pythonProcess.stdin.destroyed) {
+          try {
+            pythonProcess.stdin.write(JSON.stringify(payload));
+            pythonProcess.stdin.end();
+          } catch (writeErr) {
+            console.error('Error writing to python stdin:', writeErr);
+          }
+        } else {
+          console.error('Python stdin is closed or destroyed.');
+        }
 
         await new Promise((resolve) => {
           pythonProcess.on('close', resolve);
+          pythonProcess.on('error', resolve);
         });
 
         try {
-          const result = JSON.parse(resultData);
-          if (result.duplicate_found) {
-            duplicates.push({ id: result.duplicate_id });
+          if (resultData) {
+            const result = JSON.parse(resultData);
+            if (result.duplicate_found) {
+              duplicates.push({ id: result.duplicate_id });
+            }
           }
         } catch (e) {
           console.error("Python parsing error:", e);
@@ -105,6 +132,14 @@ const createComplaint = async (req, res) => {
 
     if (!issueType || latitude === undefined || longitude === undefined) {
       return res.status(400).json({ message: 'Please provide issueType, latitude, and longitude' });
+    }
+
+    if (typeof latitude !== 'number' || typeof longitude !== 'number') {
+      return res.status(400).json({ message: 'Invalid payload: latitude and longitude must be numbers' });
+    }
+    
+    if (req.body.accuracy !== undefined && typeof req.body.accuracy !== 'number') {
+      return res.status(400).json({ message: 'Invalid payload: accuracy must be a number' });
     }
 
     const { score, level } = await computePriority(issueType, description, latitude, longitude, image);

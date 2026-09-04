@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
-const { detectPothole } = require('../controllers/aiController');
+const { detectIssue } = require('../controllers/aiController');
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -15,7 +15,7 @@ const storage = multer.diskStorage({
 })
 const upload = multer({ storage: storage });
 
-// POST /api/detect-pothole
-router.post('/detect-pothole', upload.single('image'), detectPothole);
+// POST /api/detect
+router.post('/detect', upload.single('image'), detectIssue);
 
 module.exports = router;

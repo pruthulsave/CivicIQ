@@ -55,6 +55,12 @@ const formatDate = (dateString) => {
   return new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 }
 
+const getApiOrigin = () => {
+  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+  try { return new URL(apiUrl).origin; } catch (e) { return window.location.origin; }
+}
+const API_BASE_URL = getApiOrigin();
+
 const mapBackendComplaint = (c) => ({
   id: c._id,
   title: c.issueType || 'New issue',
@@ -64,7 +70,7 @@ const mapBackendComplaint = (c) => ({
   status: c.status || 'Pending',
   tone: c.issueType?.toLowerCase().includes('street') ? 'streetlight' : c.issueType?.toLowerCase().includes('waste') ? 'waste' : 'road',
   icon: c.issueType?.toLowerCase().includes('street') ? Navigation : c.issueType?.toLowerCase().includes('waste') ? Activity : Landmark,
-  image: c.image ? (c.image.startsWith('data:') ? c.image : `http://localhost:5000/${c.image.replace(/\\/g, '/')}`) : null,
+  image: c.image ? (c.image.startsWith('data:') || c.image.startsWith('http') ? c.image : `${API_BASE_URL}/${c.image.replace(/\\/g, '/').replace(/^\//, '')}`) : null,
   latitude: c.latitude,
   longitude: c.longitude,
   createdAt: c.createdAt,
@@ -135,8 +141,11 @@ function BottomNav({ active, onChange }) {
 
 function ComplaintCard({ complaint, onClick }) {
   const Icon = complaint.icon
+  const [imgError, setImgError] = useState(false)
   return <button className="complaint-card" onClick={onClick} aria-label={`Open ${complaint.title} report`}>
-    <div className={`complaint-thumb ${complaint.tone}`} style={complaint.image ? { backgroundImage: `url(${complaint.image})` } : {}}>{!complaint.image && <Icon size={25} />}</div>
+    <div className={`complaint-thumb ${complaint.tone}`}>
+      {complaint.image && !imgError ? <img src={complaint.image} alt={complaint.title} loading="lazy" onError={() => setImgError(true)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Icon size={25} />}
+    </div>
     <div className="complaint-info"><strong>{complaint.title}</strong><span><MapPin size={13} />{complaint.location}</span><small><Clock3 size={13} />{complaint.time}</small></div>
     <StatusBadge status={complaint.status} /><ChevronRight className="card-chevron" size={17} />
   </button>
@@ -145,6 +154,38 @@ function ComplaintCard({ complaint, onClick }) {
 function Home({ onReport, onDetail, onLanguage, onTrack, onNotifications, onHelp, complaints, loading, theme, onToggleTheme }) {
   const recent = complaints.slice(0, 3)
   const total = complaints.length
+
+  const [isDragging, setIsDragging] = useState(false)
+  const [localImage, setLocalImage] = useState(null)
+  const [localPreview, setLocalPreview] = useState(null)
+  const [isProcessing, setIsProcessing] = useState(false)
+  const fileInputRef = useRef(null)
+
+  const handleDragOver = (e) => { e.preventDefault(); setIsDragging(true) }
+  const handleDragLeave = (e) => { e.preventDefault(); setIsDragging(false) }
+  const handleDrop = (e) => {
+    e.preventDefault(); setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file && file.type.startsWith('image/')) {
+      setLocalImage(file); setLocalPreview(URL.createObjectURL(file));
+    }
+  }
+  const handleFileSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setLocalImage(file); setLocalPreview(URL.createObjectURL(file));
+    }
+  }
+
+  const handleDetectionAction = () => {
+    if (localImage) {
+      setIsProcessing(true);
+      setTimeout(() => onReport(localImage), 600); // Simulate brief processing/loading state before navigation
+    } else {
+      onReport();
+    }
+  }
+
   return <div className="screen home-screen">
     <Navbar onLanguage={onLanguage} onNotifications={onNotifications} theme={theme} onToggleTheme={onToggleTheme} />
     <div className="home-gridline" aria-hidden="true" />
@@ -153,12 +194,18 @@ function Home({ onReport, onDetail, onLanguage, onTrack, onNotifications, onHelp
         <div className="eyebrow-row"><span className="eyebrow"><span className="eyebrow-mark" />CivicIQ / Field guide</span><span className="live-signal"><span />Live service</span></div>
         <h1>Report smarter.<br /><em>Resolve faster.</em></h1>
         <p>Capture a civic issue. AI prioritizes it. Authorities resolve it—so your neighborhood keeps moving.</p>
-        <div className="hero-actions"><button className="primary-button hero-primary" onClick={onReport}><Camera size={18} />Report an issue <ArrowUpRight size={17} /></button><button className="secondary-button" onClick={() => document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' })}><span className="play-ring">→</span> See how it works</button></div>
+        <div className="hero-actions"><button className="primary-button hero-primary" onClick={handleDetectionAction} disabled={isProcessing}>{isProcessing ? <Clock3 size={18} className="spin" /> : <Camera size={18} />}{isProcessing ? 'Analyzing...' : (localPreview ? 'Detect Issue' : 'Report an issue')} <ArrowUpRight size={17} /></button><button className="secondary-button" onClick={() => document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' })}><span className="play-ring">→</span> See how it works</button></div>
         <div className="hero-proof"><div className="proof-avatar-stack"><span>AS</span><span>RK</span><span>+</span></div><p><strong>Built for everyday action.</strong><br />One clear signal at a time.</p></div>
       </div>
       <div className="hero-visual">
         <div className="visual-ambient ambient-one" /><div className="visual-ambient ambient-two" />
-        <div className="camera-surface"><div className="camera-topline"><span><span className="camera-led" />CivicLens AI</span><span>READY</span></div><img src={HERO_IMAGE} alt="CivicIQ camera capture surface" /><div className="camera-controls"><span className="camera-control"><ScanLine size={16} /> Focus area</span><button onClick={onReport} aria-label="Open camera report flow"><span className="shutter-inner"><Camera size={22} /></span></button><span className="camera-control">Auto-tag <Sparkles size={15} /></span></div></div>
+        <div className={`camera-surface ${isDragging ? 'drag-active' : ''} ${localPreview ? 'has-preview' : ''}`} onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop} onClick={() => fileInputRef.current?.click()}>
+          <input type="file" accept="image/*" ref={fileInputRef} onChange={handleFileSelect} hidden />
+          <div className="camera-topline"><span><span className="camera-led" />CivicLens AI</span><span>{localPreview ? 'IMAGE SELECTED' : 'READY'}</span></div>
+          <img src={localPreview || HERO_IMAGE} alt="CivicIQ camera capture surface" style={localPreview ? { width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' } : {}} />
+          {localPreview && <div className="replace-overlay"><ImagePlus size={18} /> Replace Image</div>}
+          <div className="camera-controls"><span className="camera-control"><ScanLine size={16} /> Focus area</span><button onClick={(e) => { e.stopPropagation(); handleDetectionAction(); }} aria-label="Open camera report flow"><span className="shutter-inner"><Camera size={22} /></span></button><span className="camera-control">Auto-tag <Sparkles size={15} /></span></div>
+        </div>
         <div className="float-context context-pothole"><span className="signal-icon blue"><Landmark size={16} /></span><span><strong>Pothole detected</strong><small>Confidence 96%</small></span><Check size={15} /></div>
         <div className="float-context context-priority"><span className="signal-icon amber"><AlertTriangle size={16} /></span><span><strong>High priority</strong><small>Near a school zone</small></span></div>
         <span className="orbit-label"><span />Coordinates locked</span>
@@ -179,24 +226,59 @@ function Home({ onReport, onDetail, onLanguage, onTrack, onNotifications, onHelp
   </div>
 }
 
-function Report({ onSubmit, ...navProps }) {
-  const [uploaded, setUploaded] = useState(false)
+function Report({ onSubmit, initialImageFile, onClearInitial, ...navProps }) {
+  const [uploaded, setUploaded] = useState(!!initialImageFile)
   const [located, setLocated] = useState(false)
   const [description, setDescription] = useState('')
   const [issueType, setIssueType] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [locationText, setLocationText] = useState("We'll add coordinates automatically")
   const [coords, setCoords] = useState(null)
-  const [previewUrl, setPreviewUrl] = useState(null)
-  const [imageFile, setImageFile] = useState(null)
+  const [previewUrl, setPreviewUrl] = useState(initialImageFile ? URL.createObjectURL(initialImageFile) : null)
+  const [imageFile, setImageFile] = useState(initialImageFile || null)
   const [duplicateWarning, setDuplicateWarning] = useState(null)
   const [aiSuggestion, setAiSuggestion] = useState(null)
+  const [detections, setDetections] = useState(null)
+  const [imgDim, setImgDim] = useState(null)
   const fileInputRef = useRef(null)
 
-  const handleFileChange = (e) => {
+  // Clear global image file once mounted
+  useEffect(() => {
+    if (initialImageFile && onClearInitial) {
+      onClearInitial()
+    }
+  }, [initialImageFile, onClearInitial])
+
+  const handleFileChange = async (e) => {
     const file = e.target.files?.[0]
     if (file) {
-      setImageFile(file); setPreviewUrl(URL.createObjectURL(file)); setUploaded(true); setDuplicateWarning(null); setAiSuggestion(null)
+      setImageFile(file); 
+      setPreviewUrl(URL.createObjectURL(file)); 
+      setUploaded(true); 
+      setDuplicateWarning(null); 
+      setAiSuggestion(null);
+      setDetections(null);
+
+      const formData = new FormData();
+      formData.append('image', file);
+      if (coords) {
+        formData.append('latitude', coords.latitude);
+        formData.append('longitude', coords.longitude);
+      }
+
+      try {
+        const result = await api.detectIssue(formData);
+        if (result.duplicate) {
+          setDuplicateWarning('AI Flag: Possible Duplicate');
+        }
+        if (result.detections && result.detections.length > 0) {
+          setDetections(result.detections);
+          // Suggest category if not set
+          if (!issueType) setIssueType('Roads & potholes');
+        }
+      } catch (err) {
+        console.error('Detection failed:', err);
+      }
     }
   }
   const handleGetLocation = () => {
@@ -280,10 +362,18 @@ function Report({ onSubmit, ...navProps }) {
 
   return <div className="screen inner-screen report-screen"><Navbar {...navProps} screen="report" /><div className="page-heading"><div><span className="section-kicker">Make a difference</span><h1>Report an issue</h1><p>Give your city a clear signal to act on.</p></div><div className="step-rail"><span className="active">01</span><i /><span>01</span></div></div>
     <div className="report-layout"><div className="report-main">
-      {duplicateWarning && <div className="decision-card decision-danger"><div className="decision-icon"><AlertTriangle size={19} /></div><div><strong>Similar complaint found nearby</strong><p>ID: {duplicateWarning.substring(duplicateWarning.length - 6).toUpperCase()} is within 25 meters.</p><div className="decision-actions"><button className="danger-button" onClick={() => proceedWithSubmit(duplicateWarning)}>Support existing</button><button className="ghost-button" onClick={() => proceedWithSubmit()}>Submit anyway</button></div></div></div>}
+      {duplicateWarning && <div className="decision-card decision-danger"><div className="decision-icon"><AlertTriangle size={19} /></div><div><strong>Similar complaint found nearby</strong><p>{duplicateWarning.startsWith('AI Flag') ? 'Our AI detected a highly similar image submitted recently.' : `ID: ${duplicateWarning.substring(duplicateWarning.length - 6).toUpperCase()} is within 25 meters.`}</p><div className="decision-actions"><button className="danger-button" onClick={() => proceedWithSubmit(duplicateWarning.startsWith('AI') ? 'AI_DUP' : duplicateWarning)}>Support existing</button><button className="ghost-button" onClick={() => proceedWithSubmit()}>Submit anyway</button></div></div></div>}
       {aiSuggestion && <div className="decision-card decision-ai"><div className="decision-icon"><Sparkles size={19} /></div><div><strong>{aiSuggestion.confidence >= 90 ? 'AI confirmed category' : 'AI suggests changing category'}</strong><p>Suggested: <b>{aiSuggestion.suggestedCategory}</b> ({aiSuggestion.confidence}%)<br /><span>{aiSuggestion.shortReason}</span></p><div className="decision-actions"><button className="primary-button" onClick={() => proceedWithSubmit(null, aiSuggestion.suggestedCategory)}>Accept & submit</button><button className="ghost-button" onClick={() => proceedWithSubmit()}>Keep mine</button></div></div></div>}
       <input type="file" accept="image/*" capture="environment" ref={fileInputRef} onChange={handleFileChange} hidden />
-      {!uploaded ? <button className="upload-zone" onClick={() => fileInputRef.current?.click()}><span className="upload-orb"><Camera size={27} /></span><span className="upload-copy"><strong>Start with a photo</strong><small>Take a photo or choose one from your gallery</small></span><span className="upload-action"><UploadCloud size={18} /> Add image</span></button> : <div className="preview-frame"><img src={previewUrl} alt="Selected civic issue" /><div className="preview-overlay"><span><Check size={15} /> Photo ready</span><button onClick={() => fileInputRef.current?.click()}>Retake photo</button></div></div>}
+      {!uploaded ? <button className="upload-zone" onClick={() => fileInputRef.current?.click()}><span className="upload-orb"><Camera size={27} /></span><span className="upload-copy"><strong>Start with a photo</strong><small>Take a photo or choose one from your gallery</small></span><span className="upload-action"><UploadCloud size={18} /> Add image</span></button> : <div className="preview-frame" style={{ position: 'relative' }}><img src={previewUrl} alt="Selected civic issue" onLoad={(e) => setImgDim({ w: e.target.naturalWidth, h: e.target.naturalHeight })} />
+      {detections && imgDim && detections.map((det, idx) => (
+        <div key={idx} style={{ position: 'absolute', border: '2px solid #3b82f6', borderRadius: '4px', left: `${(det.box[0] / imgDim.w) * 100}%`, top: `${(det.box[1] / imgDim.h) * 100}%`, width: `${((det.box[2] - det.box[0]) / imgDim.w) * 100}%`, height: `${((det.box[3] - det.box[1]) / imgDim.h) * 100}%`, pointerEvents: 'none' }}>
+          <span style={{ position: 'absolute', top: '-24px', left: '-2px', backgroundColor: '#3b82f6', color: 'white', padding: '2px 6px', fontSize: '11px', fontWeight: 600, borderRadius: '4px 4px 4px 0', whiteSpace: 'nowrap' }}>
+            {Math.round(det.confidence * 100)}% {det.severity}
+          </span>
+        </div>
+      ))}
+      <div className="preview-overlay"><span><Check size={15} /> Photo ready</span><button onClick={() => fileInputRef.current?.click()}>Retake photo</button></div></div>}
       <div className="form-section-label"><span>02</span><div><strong>Tell us what happened</strong><small>A little context helps the right team move faster.</small></div></div>
       <label className="field-label">Issue type<select value={issueType} onChange={e => setIssueType(e.target.value)}><option value="" disabled>Select an issue type</option><option>Roads & potholes</option><option>Streetlight</option><option>Waste management</option><option>Water & drainage</option></select></label>
       <button className={`location-button ${located ? 'located' : ''}`} onClick={handleGetLocation}><span className="location-icon"><LocateFixed size={19} /></span><span><strong>{located ? 'Location added' : 'Use current location'}</strong><small>{locationText}</small></span><ChevronRight size={18} /></button>
@@ -335,6 +425,7 @@ function AppContent() {
     return next
   })
   const [screen, setScreen] = useState(() => pathToScreen(window.location.pathname)); const [detail, setDetail] = useState(null); const [languageOpen, setLanguageOpen] = useState(false); const [toast, setToast] = useState(''); const [complaintsData, setComplaintsData] = useState([]); const [loading, setLoading] = useState(true)
+  const [globalImageFile, setGlobalImageFile] = useState(null)
   const showToast = (message) => { setToast(message); window.setTimeout(() => setToast(''), 3000) }
   const fetchComplaints = async () => { setLoading(true); try { const data = await api.getComplaints(); setComplaintsData(data.map(mapBackendComplaint)) } catch (err) { setComplaintsData(PREVIEW_COMPLAINTS); showToast('Preview mode · connect your civic backend for live reports') } finally { setLoading(false) } }
   useEffect(() => {
@@ -352,8 +443,8 @@ function AppContent() {
   const go = (next) => { window.history.pushState({}, '', screenToPath(next)); setScreen(next) }
   const common = { onLanguage: () => setLanguageOpen(true), onNotifications: () => showToast('Notifications are up to date'), theme, onToggleTheme: toggleTheme }
   return <main className="app-shell"><div className="app-content">
-    {screen === 'home' && <Home {...common} onReport={() => go('report')} onDetail={goDetail} onTrack={go} onHelp={() => showToast('Help centre is coming soon')} complaints={complaintsData} loading={loading} />}
-    {screen === 'report' && <Report {...common} onSubmit={() => { fetchComplaints(); go('home'); showToast('Report submitted successfully') }} />}
+    {screen === 'home' && <Home {...common} onReport={(file) => { if (file instanceof File) setGlobalImageFile(file); else setGlobalImageFile(null); go('report'); }} onDetail={goDetail} onTrack={go} onHelp={() => showToast('Help centre is coming soon')} complaints={complaintsData} loading={loading} />}
+    {screen === 'report' && <Report {...common} initialImageFile={globalImageFile} onClearInitial={() => setGlobalImageFile(null)} onSubmit={() => { fetchComplaints(); setGlobalImageFile(null); go('home'); showToast('Report submitted successfully') }} />}
     {screen === 'track' && <Track {...common} onDetail={goDetail} complaints={complaintsData} loading={loading} />}
     {screen === 'profile' && <Profile {...common} onTrack={go} />}
     {screen === 'detail' && detail && <Detail complaint={detail} onBack={() => go('track')} onShare={shareDetail} />}

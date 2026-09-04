@@ -95,5 +95,20 @@ export const api = {
       }
       throw error;
     }
+  },
+  detectIssue: async (formData) => {
+    try {
+      const response = await fetch(`${API_URL}/detect`, {
+        method: 'POST',
+        body: formData // sending as multipart form data
+      });
+      if (!response.ok) {
+        throw new Error('Detection failed');
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('API Error:', error);
+      throw error;
+    }
   }
 };

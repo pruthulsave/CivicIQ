@@ -1,4 +1,13 @@
+import axios from 'axios';
+
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+
+const axiosInstance = axios.create({
+  baseURL: API_URL,
+  headers: {
+    'Content-Type': 'application/json'
+  }
+});
 
 const fileToBase64 = (file) => new Promise((resolve, reject) => {
   if (!file) return resolve(null);
@@ -9,6 +18,24 @@ const fileToBase64 = (file) => new Promise((resolve, reject) => {
 });
 
 export const api = {
+  login: async (credentials) => {
+    try {
+      const res = await axiosInstance.post('/auth/login', credentials);
+      return res.data;
+    } catch (error) {
+      if (!error.response) throw new Error('Server offline');
+      throw new Error(error.response.data.message || 'Login failed');
+    }
+  },
+  register: async (userData) => {
+    try {
+      const res = await axiosInstance.post('/auth/register', userData);
+      return res.data;
+    } catch (error) {
+      if (!error.response) throw new Error('Server offline');
+      throw new Error(error.response.data.message || 'Registration failed');
+    }
+  },
   submitComplaint: async (formData) => {
     try {
       const payload = {};
@@ -21,28 +48,11 @@ export const api = {
           payload[key] = value;
         }
       }
-      console.log("FINAL PAYLOAD", payload);
-      console.log(typeof payload.longitude, payload.longitude);
-
-      const response = await fetch(`${API_URL}/complaints`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload),
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || 'Validation error');
-      }
-      return await response.json();
+      const res = await axiosInstance.post('/complaints', payload);
+      return res.data;
     } catch (error) {
-      console.error('API Error:', error);
-      if (error.message === 'Failed to fetch' || error.name === 'TypeError') {
-        throw new Error('Backend offline');
-      }
-      throw error;
+      if (!error.response) throw new Error('Backend offline');
+      throw new Error(error.response.data.message || 'Validation error');
     }
   },
   precheckComplaint: async (formData) => {
@@ -57,58 +67,33 @@ export const api = {
           payload[key] = value;
         }
       }
-      console.log("FINAL PAYLOAD", payload);
-      console.log(typeof payload.longitude, payload.longitude);
-
-      const response = await fetch(`${API_URL}/complaints/precheck`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload),
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || 'Validation error');
-      }
-      return await response.json();
+      const res = await axiosInstance.post('/complaints/precheck', payload);
+      return res.data;
     } catch (error) {
-      console.error('API Error:', error);
-      if (error.message === 'Failed to fetch' || error.name === 'TypeError') {
-        throw new Error('Backend offline');
-      }
-      throw error;
+      if (!error.response) throw new Error('Backend offline');
+      throw new Error(error.response.data.message || 'Validation error');
     }
   },
   getComplaints: async () => {
     try {
-      const response = await fetch(`${API_URL}/complaints`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch complaints');
-      }
-      return await response.json();
+      const res = await axiosInstance.get('/complaints');
+      return res.data;
     } catch (error) {
-      console.error('API Error:', error);
-      if (error.message === 'Failed to fetch' || error.name === 'TypeError') {
-        throw new Error('Backend offline');
-      }
-      throw error;
+      if (!error.response) throw new Error('Backend offline');
+      throw new Error('Failed to fetch complaints');
     }
   },
   detectIssue: async (formData) => {
     try {
-      const response = await fetch(`${API_URL}/detect`, {
-        method: 'POST',
-        body: formData // sending as multipart form data
+      const res = await axiosInstance.post('/detect', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
       });
-      if (!response.ok) {
-        throw new Error('Detection failed');
-      }
-      return await response.json();
+      return res.data;
     } catch (error) {
-      console.error('API Error:', error);
-      throw error;
+      if (!error.response) throw new Error('Backend offline');
+      throw new Error('Detection failed');
     }
   }
 };

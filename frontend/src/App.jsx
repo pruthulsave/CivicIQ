@@ -8,13 +8,53 @@ import {
   Share2, ShieldCheck, Sparkles, Target, UserRound, X, AlertTriangle,
   ArrowUpRight, Activity, Menu, ScanLine, Route, UploadCloud, SlidersHorizontal, Sun, Moon,
 } from 'lucide-react'
-import { MapContainer, TileLayer, Marker, Popup, useMap, Polyline } from 'react-leaflet'
-import MarkerClusterGroup from 'react-leaflet-cluster'
+import { MapContainer, TileLayer, Marker, Popup, useMap, Polyline, LayerGroup } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import L from 'leaflet'
 import 'leaflet.heat'
 import { api } from './services/api'
-import { Layers, Flame, Compass, Maximize } from 'lucide-react'
+import icon from 'leaflet/dist/images/marker-icon.png'
+import iconShadow from 'leaflet/dist/images/marker-shadow.png'
+import iconRetina from 'leaflet/dist/images/marker-icon-2x.png'
+
+let DefaultIcon = L.icon({
+  iconUrl: icon,
+  iconRetinaUrl: iconRetina,
+  shadowUrl: iconShadow,
+  iconSize: [25, 41],
+  iconAnchor: [12, 41]
+});
+L.Marker.prototype.options.icon = DefaultIcon;
+import { Layers, Flame, Compass, Maximize, Eye, EyeOff, Loader2 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import React from 'react'
+
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, errorInfo) {
+    console.error("ErrorBoundary caught an error", error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: '20px', background: '#f8d7da', color: '#721c24', borderRadius: '8px', margin: '20px', fontFamily: 'monospace' }}>
+          <h2>Map temporarily unavailable</h2>
+          <details style={{ whiteSpace: 'pre-wrap' }}>
+            <summary>Error Details</summary>
+            {this.state.error && this.state.error.toString()}
+          </details>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const HERO_IMAGE = '/images/camera-placeholder.png'
 const MARK_IMAGE = 'https://upload.wikimedia.org/wikipedia/commons/3/30/Vector_Location_Icon.svg'
@@ -134,7 +174,8 @@ function Navbar({ onLanguage, onNotifications, screen = 'home', theme, onToggleT
 }
 
 function BottomNav({ active, onChange }) {
-  const items = [['home', 'Home', Landmark], ['report', 'Report', Plus], ['track', 'Track', Target], ['map', 'Nearby', MapPin], ['profile', 'Profile', UserRound]]
+  const { t } = useTranslation();
+  const items = [['home', t('nav.home'), Landmark], ['report', t('nav.report'), Plus], ['track', t('nav.track'), Target], ['map', t('nav.nearby'), MapPin], ['profile', t('nav.profile'), UserRound]]
   return <nav className="bottom-nav" aria-label="Main navigation">
     {items.map(([key, label, Icon]) => <button key={key} className={active === key ? 'nav-item active' : 'nav-item'} onClick={() => onChange(key)} aria-current={active === key ? 'page' : undefined}>
       <span className="nav-icon"><Icon size={19} strokeWidth={active === key ? 2.5 : 1.9} /></span><span>{label}</span>
@@ -155,6 +196,7 @@ function ComplaintCard({ complaint, onClick }) {
 }
 
 function Home({ onReport, onDetail, onLanguage, onTrack, onNotifications, onHelp, complaints, loading, theme, onToggleTheme }) {
+  const { t } = useTranslation()
   const recent = complaints.slice(0, 3)
   const total = complaints.length
 
@@ -181,9 +223,9 @@ function Home({ onReport, onDetail, onLanguage, onTrack, onNotifications, onHelp
   }
 
   const handleDetectionAction = () => {
-    if (localImage) {
+    if (localPreview) {
       setIsProcessing(true);
-      setTimeout(() => onReport(localImage), 600); // Simulate brief processing/loading state before navigation
+      setTimeout(() => { setIsProcessing(false); onReport(localImage) }, 1500)
     } else {
       onReport();
     }
@@ -194,20 +236,20 @@ function Home({ onReport, onDetail, onLanguage, onTrack, onNotifications, onHelp
     <div className="home-gridline" aria-hidden="true" />
     <section className="hero-premium">
       <div className="hero-copy">
-        <div className="eyebrow-row"><span className="eyebrow"><span className="eyebrow-mark" />CivicIQ / Field guide</span><span className="live-signal"><span />Live service</span></div>
-        <h1>Report smarter.<br /><em>Resolve faster.</em></h1>
-        <p>Capture a civic issue. AI prioritizes it. Authorities resolve it—so your neighborhood keeps moving.</p>
-        <div className="hero-actions"><button className="primary-button hero-primary" onClick={handleDetectionAction} disabled={isProcessing}>{isProcessing ? <Clock3 size={18} className="spin" /> : <Camera size={18} />}{isProcessing ? 'Analyzing...' : (localPreview ? 'Detect Issue' : 'Report an issue')} <ArrowUpRight size={17} /></button><button className="secondary-button" onClick={() => document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' })}><span className="play-ring">→</span> See how it works</button></div>
-        <div className="hero-proof"><div className="proof-avatar-stack"><span>AS</span><span>RK</span><span>+</span></div><p><strong>Built for everyday action.</strong><br />One clear signal at a time.</p></div>
+        <div className="eyebrow-row"><span className="eyebrow"><span className="eyebrow-mark" />{t('hero.eyebrow')}</span><span className="live-signal"><span />{t('hero.live')}</span></div>
+        <h1>{t('hero.title1')}<br /><em>{t('hero.title2')}</em></h1>
+        <p>{t('hero.subtitle')}</p>
+        <div className="hero-actions"><button className="primary-button hero-primary" onClick={handleDetectionAction} disabled={isProcessing}>{isProcessing ? <Clock3 size={18} className="spin" /> : <Camera size={18} />}{isProcessing ? t('hero.buttonAnalyzing') : (localPreview ? t('hero.buttonDetect') : t('hero.buttonPrimary'))} <ArrowUpRight size={17} /></button><button className="secondary-button" onClick={() => document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' })}><span className="play-ring">→</span> {t('hero.buttonSecondary')}</button></div>
+        <div className="hero-proof"><div className="proof-avatar-stack"><span>AS</span><span>RK</span><span>+</span></div><p><strong>{t('hero.proofStrong')}</strong><br />{t('hero.proofSmall')}</p></div>
       </div>
       <div className="hero-visual">
         <div className="visual-ambient ambient-one" /><div className="visual-ambient ambient-two" />
         <div className={`camera-surface ${isDragging ? 'drag-active' : ''} ${localPreview ? 'has-preview' : ''}`} onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop} onClick={() => fileInputRef.current?.click()}>
           <input type="file" accept="image/*" ref={fileInputRef} onChange={handleFileSelect} hidden />
-          <div className="camera-topline"><span><span className="camera-led" />CivicLens AI</span><span>{localPreview ? 'IMAGE SELECTED' : 'READY'}</span></div>
+          <div className="camera-topline"><span><span className="camera-led" />{t('camera.ai')}</span><span>{localPreview ? t('camera.selected') : t('camera.ready')}</span></div>
           <img src={localPreview || HERO_IMAGE} alt="CivicIQ camera capture surface" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} onError={(e) => { if (e.target.src !== 'https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?auto=format&fit=crop&q=80&w=800') e.target.src = 'https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?auto=format&fit=crop&q=80&w=800'; }} />
-          {localPreview && <div className="replace-overlay"><ImagePlus size={18} /> Replace Image</div>}
-          <div className="camera-controls"><span className="camera-control"><ScanLine size={16} /> Focus area</span><button onClick={(e) => { e.stopPropagation(); handleDetectionAction(); }} aria-label="Open camera report flow"><span className="shutter-inner"><Camera size={22} /></span></button><span className="camera-control">Auto-tag <Sparkles size={15} /></span></div>
+          {localPreview && <div className="replace-overlay"><ImagePlus size={18} /> {t('camera.replace')}</div>}
+          <div className="camera-controls"><span className="camera-control"><ScanLine size={16} /> {t('camera.focus')}</span><button onClick={(e) => { e.stopPropagation(); handleDetectionAction(); }} aria-label="Open camera report flow"><span className="shutter-inner"><Camera size={22} /></span></button><span className="camera-control">{t('camera.autotag')} <Sparkles size={15} /></span></div>
         </div>
         <div className="float-context context-pothole"><span className="signal-icon blue"><Landmark size={16} /></span><span><strong>Pothole detected</strong><small>Confidence 96%</small></span><Check size={15} /></div>
         <div className="float-context context-priority"><span className="signal-icon amber"><AlertTriangle size={16} /></span><span><strong>High priority</strong><small>Near a school zone</small></span></div>
@@ -470,6 +512,7 @@ const getDistance = (lat1, lon1, lat2, lon2) => {
 }
 
 function MapScreen({ complaints, onDetail, onBack }) {
+  const { t } = useTranslation();
   const [mapMounted, setMapMounted] = useState(false);
   const [userLoc, setUserLoc] = useState({ latitude: 19.0760, longitude: 72.8777 }); 
   const [locErr, setLocErr] = useState(false);
@@ -543,7 +586,7 @@ function MapScreen({ complaints, onDetail, onBack }) {
   return <div className="screen map-screen">
     <div className="map-header">
       <button className="back-button" onClick={onBack}><ArrowLeft size={20} /></button>
-      <div><span className="section-kicker">Civic map 2.0</span><strong>Nearby issues</strong></div>
+      <div><span className="section-kicker">{t('map.kicker')}</span><strong>{t('map.title')}</strong></div>
     </div>
     
     {locErr && <div className="map-alert">Location access denied. Showing default area.</div>}
@@ -565,12 +608,12 @@ function MapScreen({ complaints, onDetail, onBack }) {
           <div className="civic-score-card">
             <div className="score-main">
               <strong>{civicStats.score}</strong>
-              <span>Civic Score</span>
+              <span>{t('map.score')}</span>
             </div>
             <div className="score-details">
-              <div><span className="dot amber"/> {civicStats.open} Open</div>
-              <div><span className="dot green"/> {civicStats.resolved} Resolved</div>
-              <div><span className="dot red"/> {civicStats.critical} Critical</div>
+              <div><span className="dot amber"/> {civicStats.open} {t('map.open')}</div>
+              <div><span className="dot green"/> {civicStats.resolved} {t('map.resolved')}</div>
+              <div><span className="dot red"/> {civicStats.critical} {t('map.critical')}</div>
             </div>
           </div>
         </div>
@@ -579,17 +622,17 @@ function MapScreen({ complaints, onDetail, onBack }) {
           <div className="map-tools-row">
             <div className="map-glass-panel filter-chips">
               {['All', 'Roads', 'Streetlight', 'Waste', 'Water'].map(cat => (
-                <button key={cat} className={category === cat ? 'active' : ''} onClick={() => setCategory(cat)}>{cat}</button>
+                <button key={cat} className={category === cat ? 'active' : ''} onClick={() => setCategory(cat)}>{t(`categories.${cat.toLowerCase()}`) || cat}</button>
               ))}
             </div>
             
             <button className={`map-glass-panel heatmap-toggle ${isHeatmap ? 'active' : ''}`} onClick={() => setIsHeatmap(!isHeatmap)}>
-              <Flame size={16} /> Heatmap {isHeatmap ? 'On' : 'Off'}
+              <Flame size={16} /> {isHeatmap ? t('map.heatmapOn') : t('map.heatmapOff')}
             </button>
           </div>
 
           <div className="map-glass-panel radius-slider">
-            <label>Radius: {radius >= 1000 ? `${radius/1000}km` : `${radius}m`}</label>
+            <label>{t('map.radius')} {radius >= 1000 ? `${radius/1000}km` : `${radius}m`}</label>
             <input type="range" min="500" max="5000" step="500" value={radius} onChange={(e) => setRadius(Number(e.target.value))} />
           </div>
         </div>
@@ -616,7 +659,7 @@ function MapScreen({ complaints, onDetail, onBack }) {
             {isHeatmap ? (
               <HeatmapLayer points={heatmapPoints} />
             ) : (
-              <MarkerClusterGroup chunkedLoading maxClusterRadius={45} showCoverageOnHover={false}>
+              <LayerGroup>
                 {filteredComplaints.map(c => (
                   <Marker key={c.id} position={[c.latitude, c.longitude]} icon={createPremiumIcon(getSeverityColor(c))} eventHandlers={{ click: () => fetchRoute(c.latitude, c.longitude) }}>
                     <Popup className="premium-popup" onClose={() => setRoute(null)}>
@@ -635,7 +678,7 @@ function MapScreen({ complaints, onDetail, onBack }) {
                     </Popup>
                   </Marker>
                 ))}
-              </MarkerClusterGroup>
+              </LayerGroup>
             )}
           </MapContainer>
         )}
@@ -644,29 +687,153 @@ function MapScreen({ complaints, onDetail, onBack }) {
   </div>
 }
 
-function Profile({ onLanguage, onNotifications, onTrack, theme, onToggleTheme }) {
-  const items = [['My reports', Target, '3 reports', () => onTrack('track')], ['Notifications', Bell, 'Up to date', onNotifications], ['Language', Languages, 'English', onLanguage], ['Help & support', MessageCircleQuestion, "We're here to help", () => {}], ['About CivicIQ', CircleHelp, 'Version 1.0', () => {}]]
-  return <div className="screen inner-screen profile-screen"><Navbar onLanguage={onLanguage} onNotifications={onNotifications} theme={theme} onToggleTheme={onToggleTheme} screen="profile" /><div className="page-heading"><div><span className="section-kicker">Your civic journey / Account</span><h1>Profile</h1><p>Your preferences and activity, together.</p></div><button className="icon-button"><Menu size={19} /></button></div><div className="profile-card"><div className="avatar">AS</div><div><span className="section-kicker">Citizen account</span><h2>Arjun Sharma</h2><span>Making Bengaluru better, one signal at a time.</span></div><ChevronRight size={19} /></div><div className="profile-activity"><div className="activity-register-head"><div><span className="section-kicker">Activity register</span><strong>Your civic footprint</strong></div><span className="activity-register-status"><span />Current</span></div><div className="profile-metrics"><div><strong>03</strong><span>Reports made</span></div><div><strong>02</strong><span>Issues resolved</span></div><div><strong>14d</strong><span>Active since</span></div></div><div className="profile-progress"><span><i /></span><small>Your reports are helping the civic team see the whole picture.</small></div></div><div className="profile-menu">{items.map(([label, Icon, text, action]) => <button key={label} onClick={action}><span className="menu-icon"><Icon size={18} /></span><span className="menu-copy"><strong>{label}</strong><small>{text}</small></span><ChevronRight size={17} /></button>)}</div><button className="logout-button"><LogOut size={17} />Log out</button></div>
+function Profile({ onLanguage, onNotifications, onTrack, theme, onToggleTheme, onLogout }) {
+  const { t } = useTranslation();
+  const items = [['My reports', Target, '3 reports', () => onTrack('track')], ['Notifications', Bell, 'Up to date', onNotifications], [t('profile.language'), Languages, 'English', onLanguage], ['Help & support', MessageCircleQuestion, "We're here to help", () => {}], ['About CivicIQ', CircleHelp, 'Version 1.0', () => {}]]
+  return <div className="screen inner-screen profile-screen"><Navbar onLanguage={onLanguage} onNotifications={onNotifications} theme={theme} onToggleTheme={onToggleTheme} screen="profile" /><div className="page-heading"><div><span className="section-kicker">{t('profile.kicker')}</span><h1>{t('profile.title')}</h1><p>{t('profile.subtitle')}</p></div><button className="icon-button"><Menu size={19} /></button></div><div className="profile-card"><div className="avatar">AS</div><div><span className="section-kicker">Citizen account</span><h2>Arjun Sharma</h2><span>Making Bengaluru better, one signal at a time.</span></div><ChevronRight size={19} /></div><div className="profile-activity"><div className="activity-register-head"><div><span className="section-kicker">Activity register</span><strong>Your civic footprint</strong></div><span className="activity-register-status"><span />Current</span></div><div className="profile-metrics"><div><strong>03</strong><span>Reports made</span></div><div><strong>02</strong><span>Issues resolved</span></div><div><strong>14d</strong><span>Active since</span></div></div><div className="profile-progress"><span><i /></span><small>Your reports are helping the civic team see the whole picture.</small></div></div><div className="profile-menu">{items.map(([label, Icon, text, action]) => <button key={label} onClick={action}><span className="menu-icon"><Icon size={18} /></span><span className="menu-copy"><strong>{label}</strong><small>{text}</small></span><ChevronRight size={17} /></button>)}</div><button className="logout-button" onClick={onLogout}><LogOut size={17} />{t('profile.logout')}</button></div>
 }
 
-function LanguageSheet({ onClose }) { return <div className="sheet-backdrop" onClick={onClose}><div className="language-sheet" onClick={e => e.stopPropagation()}><div className="sheet-handle" /><div className="sheet-header"><div><span className="section-kicker">Choose your language</span><h2>Language</h2></div><button className="back-button" onClick={onClose}><X size={19} /></button></div><div className="language-options">{languages.map(([native, english], i) => <button key={english} onClick={() => onClose(english)}><span>{native}</span><small>{english}</small>{i === 0 && <Check size={19} />}</button>)}</div></div></div> }
+function LanguageSheet({ onClose }) { 
+  const { t, i18n } = useTranslation();
+  return <div className="sheet-backdrop" onClick={onClose}><div className="language-sheet" onClick={e => e.stopPropagation()}><div className="sheet-handle" /><div className="sheet-header"><div><span className="section-kicker">Choose your language</span><h2>{t('profile.language')}</h2></div><button className="back-button" onClick={onClose}><X size={19} /></button></div><div className="language-options">{[['English', 'en'], ['हिन्दी', 'hi'], ['मराठी', 'mr'], ['ગુજરાતી', 'gu']].map(([native, code], i) => <button key={code} onClick={() => { i18n.changeLanguage(code); onClose(code); }}><span>{native}</span><small>{code}</small>{i18n.language === code && <Check size={19} />}</button>)}</div></div></div> 
+}
+
+function AuthScreen({ onAuthSuccess }) {
+  const { t } = useTranslation();
+  const [isLogin, setIsLogin] = useState(true);
+  const [formData, setFormData] = useState({ name: '', email: '', phone: '', password: '', confirmPassword: '' });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [showPassword, setShowPassword] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError(null);
+    if (!isLogin && formData.password !== formData.confirmPassword) {
+      return setError('Passwords do not match');
+    }
+    setLoading(true);
+    try {
+      if (isLogin) {
+        const data = await api.login({ email: formData.email, password: formData.password });
+        localStorage.setItem('token', data.token);
+        if (data.user) localStorage.setItem('user', JSON.stringify(data.user));
+        onAuthSuccess();
+      } else {
+        const data = await api.register({ name: formData.name, email: formData.email, password: formData.password, phone: formData.phone });
+        localStorage.setItem('token', data.token);
+        if (data.user) localStorage.setItem('user', JSON.stringify(data.user));
+        onAuthSuccess();
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="auth-screen">
+      <div className="civic-grid"></div>
+      <div className="auth-layout">
+        <div className="auth-hero">
+          <div className="auth-brand"><span className="brand-mark"><span className="crosshair-mark" aria-hidden="true"><i /><i /><i /><i /></span><img src={MARK_IMAGE} alt="" /></span><strong>CivicIQ</strong></div>
+          <h1>{t('auth.tagline')}</h1>
+          <div className="auth-trust-points">
+            <div className="trust-point"><div className="trust-icon"><ShieldCheck size={20}/></div><span>{t('auth.trust1')}</span></div>
+            <div className="trust-point"><div className="trust-icon"><Target size={20}/></div><span>{t('auth.trust2')}</span></div>
+            <div className="trust-point"><div className="trust-icon"><UserRound size={20}/></div><span>{t('auth.trust3')}</span></div>
+          </div>
+        </div>
+        <div className="auth-form-container">
+          <div className="auth-glass-card">
+            <div className="auth-header">
+              <h2>{isLogin ? t('auth.login') : t('auth.register')}</h2>
+            </div>
+            {error && <div className="auth-error error-shake"><AlertTriangle size={16}/> {error}</div>}
+            <form onSubmit={handleSubmit}>
+              {!isLogin && (
+                <>
+                  <div className="input-group">
+                    <label>{t('auth.name')}</label>
+                    <input type="text" required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+                  </div>
+                  <div className="input-group">
+                    <label>{t('auth.phone')}</label>
+                    <input type="tel" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
+                  </div>
+                </>
+              )}
+              <div className="input-group">
+                <label>{t('auth.email')}</label>
+                <input type="email" required value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
+              </div>
+              <div className="input-group password-group">
+                <label>{t('auth.password')}</label>
+                <div className="password-input">
+                  <input type={showPassword ? "text" : "password"} required value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} />
+                  <button type="button" onClick={() => setShowPassword(!showPassword)}>{showPassword ? <EyeOff size={18}/> : <Eye size={18}/>}</button>
+                </div>
+              </div>
+              {!isLogin && (
+                <div className="input-group password-group">
+                  <label>{t('auth.confirmPassword')}</label>
+                  <input type={showPassword ? "text" : "password"} required value={formData.confirmPassword} onChange={e => setFormData({...formData, confirmPassword: e.target.value})} />
+                </div>
+              )}
+              {isLogin && (
+                <div className="auth-options">
+                  <label className="remember-me"><input type="checkbox" /> {t('auth.remember')}</label>
+                  <a href="#" className="forgot-link">{t('auth.forgot')}</a>
+                </div>
+              )}
+              <button type="submit" className="primary-button submit-auth" disabled={loading}>
+                {loading ? <Loader2 className="spin" size={20}/> : (isLogin ? t('auth.submitLogin') : t('auth.submitRegister'))}
+              </button>
+            </form>
+            <div className="auth-switch">
+              {isLogin ? t('auth.noAccount') : t('auth.haveAccount')} <button onClick={() => { setIsLogin(!isLogin); setError(null); }}>{isLogin ? t('auth.register') : t('auth.login')}</button>
+            </div>
+          </div>
+          <div className="auth-footer-trust">
+            <span>Government-ready</span> • <span>AI-assisted verification</span> • <span>Privacy protected</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function AppContent() {
+  const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('token'));
   const [theme, setTheme] = useState(() => (localStorage.getItem('theme') === 'dark' || document.documentElement.classList.contains('dark')) ? 'dark' : 'light')
+  
   const toggleTheme = () => setTheme(previous => {
     const next = previous === 'dark' ? 'light' : 'dark'
     document.documentElement.classList.toggle('dark', next === 'dark')
     localStorage.setItem('theme', next)
     return next
   })
+
   const [screen, setScreen] = useState(() => pathToScreen(window.location.pathname)); const [detail, setDetail] = useState(null); const [languageOpen, setLanguageOpen] = useState(false); const [toast, setToast] = useState(''); const [complaintsData, setComplaintsData] = useState([]); const [loading, setLoading] = useState(true)
   const [globalImageFile, setGlobalImageFile] = useState(null)
   const showToast = (message) => { setToast(message); window.setTimeout(() => setToast(''), 3000) }
   const fetchComplaints = async () => { setLoading(true); try { const data = await api.getComplaints(); setComplaintsData(data.map(mapBackendComplaint)) } catch (err) { setComplaintsData(PREVIEW_COMPLAINTS); showToast('Preview mode · connect your civic backend for live reports') } finally { setLoading(false) } }
+  
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark')
     localStorage.setItem('theme', theme)
   }, [theme])
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    setIsAuthenticated(false);
+    setScreen('home');
+  };
+
+  if (!isAuthenticated) {
+    return <AuthScreen onAuthSuccess={() => setIsAuthenticated(true)} />
+  }
   useEffect(() => {
     fetchComplaints()
     const onPopState = () => setScreen(pathToScreen(window.location.pathname))
@@ -681,9 +848,9 @@ function AppContent() {
     {screen === 'home' && <Home {...common} onReport={(file) => { if (file instanceof File) setGlobalImageFile(file); else setGlobalImageFile(null); go('report'); }} onDetail={goDetail} onTrack={go} onHelp={() => showToast('Help centre is coming soon')} complaints={complaintsData} loading={loading} />}
     {screen === 'report' && <Report {...common} initialImageFile={globalImageFile} onClearInitial={() => setGlobalImageFile(null)} onSubmit={() => { fetchComplaints(); setGlobalImageFile(null); go('home'); showToast('Report submitted successfully') }} />}
     {screen === 'track' && <Track {...common} onDetail={goDetail} complaints={complaintsData} loading={loading} />}
-    {screen === 'profile' && <Profile {...common} onTrack={go} />}
+    {screen === 'profile' && <Profile {...common} onTrack={go} onLogout={handleLogout} />}
     {screen === 'detail' && detail && <Detail complaint={detail} onBack={() => go('track')} onShare={shareDetail} />}
-    {screen === 'map' && <MapScreen complaints={complaintsData} onDetail={goDetail} onBack={() => go('home')} />}
+    {screen === 'map' && <ErrorBoundary><MapScreen complaints={complaintsData} onDetail={goDetail} onBack={() => go('home')} /></ErrorBoundary>}
   </div>{(screen !== 'detail' && screen !== 'map') && <BottomNav active={screen} onChange={go} />}{languageOpen && <LanguageSheet onClose={lang => { setLanguageOpen(false); if (lang) showToast(`Language set to ${lang}`) }} />}{toast && <div className="toast" role="status"><Check size={16} />{toast}</div>}</main>
 }
 

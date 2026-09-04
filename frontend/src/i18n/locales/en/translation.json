@@ -1,0 +1,75 @@
+{
+  "nav": {
+    "home": "Home",
+    "report": "Report",
+    "track": "Track",
+    "nearby": "Nearby",
+    "profile": "Profile"
+  },
+  "hero": {
+    "eyebrow": "CivicIQ / Field guide",
+    "live": "Live service",
+    "title1": "Report smarter.",
+    "title2": "Resolve faster.",
+    "subtitle": "Capture a civic issue. AI prioritizes it. Authorities resolve it—so your neighborhood keeps moving.",
+    "buttonPrimary": "Report an issue",
+    "buttonDetect": "Detect Issue",
+    "buttonAnalyzing": "Analyzing...",
+    "buttonSecondary": "See how it works",
+    "proofStrong": "Built for everyday action.",
+    "proofSmall": "One clear signal at a time."
+  },
+  "camera": {
+    "ai": "CivicLens AI",
+    "ready": "READY",
+    "selected": "IMAGE SELECTED",
+    "replace": "Replace Image",
+    "focus": "Focus area",
+    "autotag": "Auto-tag"
+  },
+  "auth": {
+    "login": "Login",
+    "register": "Register",
+    "email": "Email Address",
+    "password": "Password",
+    "name": "Full Name",
+    "phone": "Phone Number",
+    "confirmPassword": "Confirm Password",
+    "remember": "Remember me",
+    "forgot": "Forgot password?",
+    "submitLogin": "Sign In",
+    "submitRegister": "Create Account",
+    "haveAccount": "Already have an account?",
+    "noAccount": "Don't have an account?",
+    "trust1": "AI Verified Reports",
+    "trust2": "Live Civic Tracking",
+    "trust3": "Secure Citizen Identity",
+    "tagline": "Report smarter. Fix faster."
+  },
+  "map": {
+    "title": "Nearby issues",
+    "kicker": "Civic map 2.0",
+    "heatmapOn": "Heatmap On",
+    "heatmapOff": "Heatmap Off",
+    "radius": "Radius:",
+    "score": "Civic Score",
+    "open": "Open",
+    "resolved": "Resolved",
+    "critical": "Critical",
+    "details": "Details"
+  },
+  "categories": {
+    "all": "All",
+    "roads": "Roads",
+    "streetlight": "Streetlight",
+    "waste": "Waste",
+    "water": "Water"
+  },
+  "profile": {
+    "title": "Profile",
+    "kicker": "Your civic journey / Account",
+    "subtitle": "Your preferences and activity, together.",
+    "logout": "Log out",
+    "language": "Language"
+  }
+}

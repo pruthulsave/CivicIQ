@@ -6,7 +6,10 @@ const connectDB = require('./config/db');
 const app = express();
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: "http://localhost:5173",
+  credentials: true
+}));
 app.use(express.json());
 
 // Database connection
@@ -19,6 +22,9 @@ app.get('/api/health', (req, res) => {
     message: 'CivicIQ Backend Running'
   });
 });
+
+// Auth routes
+app.use('/api/auth', require('./routes/authRoutes'));
 
 // Complaint routes
 app.use('/api/complaints', require('./routes/complaintRoutes'));

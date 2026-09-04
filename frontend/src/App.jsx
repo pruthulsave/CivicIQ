@@ -8,17 +8,20 @@ import {
   Share2, ShieldCheck, Sparkles, Target, UserRound, X, AlertTriangle,
   ArrowUpRight, Activity, Menu, ScanLine, Route, UploadCloud, SlidersHorizontal, Sun, Moon,
 } from 'lucide-react'
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Popup, useMap, Polyline } from 'react-leaflet'
+import MarkerClusterGroup from 'react-leaflet-cluster'
 import 'leaflet/dist/leaflet.css'
 import L from 'leaflet'
+import 'leaflet.heat'
 import { api } from './services/api'
+import { Layers, Flame, Compass, Maximize } from 'lucide-react'
 
-const HERO_IMAGE = '/manus-storage/civiciq-hero-camera_ba59eb21.png'
-const MARK_IMAGE = '/manus-storage/civiciq-mark_b09c8187.png'
+const HERO_IMAGE = '/images/camera-placeholder.png'
+const MARK_IMAGE = 'https://upload.wikimedia.org/wikipedia/commons/3/30/Vector_Location_Icon.svg'
 const ISSUE_IMAGES = {
-  road: '/manus-storage/civiciq-issue-pothole_5715a845.jpg',
-  streetlight: '/manus-storage/civiciq-issue-light_ccb79939.jpg',
-  waste: '/manus-storage/civiciq-issue-waste_472a705b.jpg',
+  road: 'https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?auto=format&fit=crop&q=80&w=400',
+  streetlight: 'https://images.unsplash.com/photo-1517435198889-40da820c2b29?auto=format&fit=crop&q=80&w=400',
+  waste: 'https://images.unsplash.com/photo-1605600659908-0ef719419d41?auto=format&fit=crop&q=80&w=400',
 }
 
 const createMarkerIcon = (color) => L.divIcon({
@@ -202,7 +205,7 @@ function Home({ onReport, onDetail, onLanguage, onTrack, onNotifications, onHelp
         <div className={`camera-surface ${isDragging ? 'drag-active' : ''} ${localPreview ? 'has-preview' : ''}`} onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop} onClick={() => fileInputRef.current?.click()}>
           <input type="file" accept="image/*" ref={fileInputRef} onChange={handleFileSelect} hidden />
           <div className="camera-topline"><span><span className="camera-led" />CivicLens AI</span><span>{localPreview ? 'IMAGE SELECTED' : 'READY'}</span></div>
-          <img src={localPreview || HERO_IMAGE} alt="CivicIQ camera capture surface" style={localPreview ? { width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' } : {}} />
+          <img src={localPreview || HERO_IMAGE} alt="CivicIQ camera capture surface" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} onError={(e) => { if (e.target.src !== 'https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?auto=format&fit=crop&q=80&w=800') e.target.src = 'https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?auto=format&fit=crop&q=80&w=800'; }} />
           {localPreview && <div className="replace-overlay"><ImagePlus size={18} /> Replace Image</div>}
           <div className="camera-controls"><span className="camera-control"><ScanLine size={16} /> Focus area</span><button onClick={(e) => { e.stopPropagation(); handleDetectionAction(); }} aria-label="Open camera report flow"><span className="shutter-inner"><Camera size={22} /></span></button><span className="camera-control">Auto-tag <Sparkles size={15} /></span></div>
         </div>
@@ -242,12 +245,36 @@ function Report({ onSubmit, initialImageFile, onClearInitial, ...navProps }) {
   const [imgDim, setImgDim] = useState(null)
   const fileInputRef = useRef(null)
 
-  // Clear global image file once mounted
-  useEffect(() => {
-    if (initialImageFile && onClearInitial) {
-      onClearInitial()
+  // Extract detection logic
+  const runDetection = async (file, currentCoords) => {
+    const formData = new FormData();
+    formData.append('image', file);
+    if (currentCoords) {
+      formData.append('latitude', currentCoords.latitude);
+      formData.append('longitude', currentCoords.longitude);
     }
-  }, [initialImageFile, onClearInitial])
+
+    try {
+      const result = await api.detectIssue(formData);
+      if (result.duplicate) {
+        setDuplicateWarning('AI Flag: Possible Duplicate');
+      }
+      if (result.detections && result.detections.length > 0) {
+        setDetections(result.detections);
+        setIssueType(prev => prev ? prev : 'Roads & potholes');
+      }
+    } catch (err) {
+      console.error('Detection failed:', err);
+    }
+  }
+
+  // Clear global image file once mounted, and trigger detection for it
+  useEffect(() => {
+    if (initialImageFile) {
+      runDetection(initialImageFile, coords);
+      if (onClearInitial) onClearInitial();
+    }
+  }, [initialImageFile]) // Intentionally omit coords to avoid re-triggering
 
   const handleFileChange = async (e) => {
     const file = e.target.files?.[0]
@@ -258,27 +285,7 @@ function Report({ onSubmit, initialImageFile, onClearInitial, ...navProps }) {
       setDuplicateWarning(null); 
       setAiSuggestion(null);
       setDetections(null);
-
-      const formData = new FormData();
-      formData.append('image', file);
-      if (coords) {
-        formData.append('latitude', coords.latitude);
-        formData.append('longitude', coords.longitude);
-      }
-
-      try {
-        const result = await api.detectIssue(formData);
-        if (result.duplicate) {
-          setDuplicateWarning('AI Flag: Possible Duplicate');
-        }
-        if (result.detections && result.detections.length > 0) {
-          setDetections(result.detections);
-          // Suggest category if not set
-          if (!issueType) setIssueType('Roads & potholes');
-        }
-      } catch (err) {
-        console.error('Detection failed:', err);
-      }
+      await runDetection(file, coords);
     }
   }
   const handleGetLocation = () => {
@@ -403,10 +410,238 @@ function Detail({ complaint, onBack, onShare }) {
   return <div className="screen inner-screen detail-screen"><div className="detail-top"><button className="back-button" onClick={onBack} aria-label="Back to reports"><ArrowLeft size={20} /></button><span className="detail-label"><span className="context-dot" />Report details</span><button className="back-button" aria-label="Share report" onClick={onShare}><Share2 size={19} /></button></div><div className={`detail-photo ${complaint.tone}`} style={complaint.image ? { backgroundImage: `url(${complaint.image})` } : {}}>{!complaint.image && <complaint.icon size={52} />}<span className="photo-label">CIVICIQ / FIELD IMAGE</span></div><div className="priority-card"><div className="priority-score" style={{ '--score-color': getScoreColor(complaint.priorityLevel) }}>{complaint.priorityScore}</div><div><span className="section-kicker">CivicLens analysis</span><strong><ShieldCheck size={15} /> AI priority: {complaint.priorityLevel}</strong><small>Calculated from proximity, category, and community context.</small></div><ArrowUpRight size={17} /></div><div className="detail-title"><div><span className="section-kicker">ID: {complaint.id.substring(complaint.id.length - 6).toUpperCase()}</span><h1>{complaint.title}</h1></div><StatusBadge status={complaint.status} /></div><div className="detail-location"><span className="location-icon"><MapPin size={18} /></span><span><strong>{complaint.location}</strong><small>Reported {complaint.date}</small></span><ChevronRight size={18} /></div><div className="detail-section"><div className="section-heading"><div><span className="section-kicker">Progress</span><h2>Report timeline</h2></div><span className="section-index">04 / 04</span></div><Timeline status={complaint.status} createdAt={complaint.createdAt} updatedAt={complaint.updatedAt} /></div><button className="share-button" onClick={onShare}><Share2 size={17} />Share report <ArrowUpRight size={16} /></button></div>
 }
 
+const MAP_LAYERS = {
+  Street: { url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', attribution: '&copy; OpenStreetMap' },
+  Terrain: { url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', attribution: 'OpenTopoMap' },
+  Dark: { url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', attribution: '&copy; CartoDB' },
+  Satellite: { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attribution: 'Esri' },
+}
+
+const getSeverityColor = (c) => {
+  if (c.status === 'Resolved') return '#10b981';
+  if (c.priorityLevel === 'Critical' || c.priorityLevel === 'High') return '#ef4444';
+  if (c.priorityLevel === 'Medium') return '#f59e0b';
+  return '#3b82f6';
+}
+
+const createPremiumIcon = (color) => L.divIcon({
+  className: 'premium-marker',
+  html: `<div style="background-color: ${color}; width: 14px; height: 14px; border-radius: 50%; border: 3px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.3);"></div>`,
+  iconSize: [20, 20],
+  iconAnchor: [10, 10]
+})
+
+function HeatmapLayer({ points }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!points || !points.length) return;
+    const heat = L.heatLayer(points, { radius: 25, blur: 15, maxZoom: 17 }).addTo(map);
+    return () => { map.removeLayer(heat); }
+  }, [map, points]);
+  return null;
+}
+
+function MapInvalidator() {
+  const map = useMap();
+  useEffect(() => {
+    const timer = setTimeout(() => map.invalidateSize(), 300);
+    return () => clearTimeout(timer);
+  }, [map]);
+  return null;
+}
+
+function FlyToUser({ coords, trigger }) {
+  const map = useMap();
+  useEffect(() => {
+    if (coords && trigger > 0) map.flyTo([coords.latitude, coords.longitude], 15, { animate: true, duration: 1.5 });
+  }, [coords, trigger, map]);
+  return null;
+}
+
+const getDistance = (lat1, lon1, lat2, lon2) => {
+  const R = 6371e3;
+  const p1 = lat1 * Math.PI/180;
+  const p2 = lat2 * Math.PI/180;
+  const dp = (lat2-lat1) * Math.PI/180;
+  const dl = (lon2-lon1) * Math.PI/180;
+  const a = Math.sin(dp/2) * Math.sin(dp/2) + Math.cos(p1) * Math.cos(p2) * Math.sin(dl/2) * Math.sin(dl/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+}
+
 function MapScreen({ complaints, onDetail, onBack }) {
-  const [userLoc, setUserLoc] = useState([12.9716, 77.5946]); const [locErr, setLocErr] = useState(false)
-  useEffect(() => { if (navigator.geolocation) navigator.geolocation.getCurrentPosition(pos => setUserLoc([pos.coords.latitude, pos.coords.longitude]), () => setLocErr(true)) }, [])
-  return <div className="screen map-screen"><div className="map-header"><button className="back-button" onClick={onBack}><ArrowLeft size={20} /></button><div><span className="section-kicker">Civic map</span><strong>Nearby issues</strong></div><button className="icon-button"><Navigation size={18} /></button></div>{locErr && <div className="map-alert">Location access denied. Showing default area.</div>}<div className="map-wrap"><MapContainer center={userLoc} zoom={13} style={{ height: '100%', width: '100%' }}><TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap contributors" />{complaints.map(c => c.latitude && c.longitude ? <Marker key={c.id} position={[c.latitude, c.longitude]} icon={createMarkerIcon(getStatusColor(c.status))}><Popup><div className="map-popup"><span className="section-kicker">{c.status}</span><h3>{c.title}</h3><p>{c.location}</p><button onClick={() => onDetail(c)}>Open details <ArrowUpRight size={14} /></button></div></Popup></Marker> : null)}</MapContainer><div className="map-legend"><span><i className="legend-dot blue" />Under review</span><span><i className="legend-dot amber" />Pending</span><span><i className="legend-dot green" />Resolved</span></div><div className="map-summary"><span className="summary-icon"><MapPin size={17} /></span><span><strong>{complaints.length} issues nearby</strong><small>Updated just now · Move the map to explore</small></span></div></div></div>
+  const [mapMounted, setMapMounted] = useState(false);
+  const [userLoc, setUserLoc] = useState({ latitude: 19.0760, longitude: 72.8777 }); 
+  const [locErr, setLocErr] = useState(false);
+  const [mapType, setMapType] = useState('Street');
+  const [isHeatmap, setIsHeatmap] = useState(false);
+  const [category, setCategory] = useState('All');
+  const [radius, setRadius] = useState(5000); // 5km max
+  const [flyTrigger, setFlyTrigger] = useState(0);
+  const [route, setRoute] = useState(null);
+  
+  useEffect(() => { 
+    // Ensure parent layout is complete before mounting MapContainer
+    requestAnimationFrame(() => setTimeout(() => setMapMounted(true), 100));
+
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        pos => {
+          setUserLoc({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+          setFlyTrigger(f => f + 1);
+        },
+        () => setLocErr(true)
+      )
+    } 
+  }, [])
+
+  const fetchRoute = async (targetLat, targetLng) => {
+    try {
+      const res = await fetch(`https://router.project-osrm.org/route/v1/foot/${userLoc.longitude},${userLoc.latitude};${targetLng},${targetLat}?overview=full&geometries=geojson`);
+      const data = await res.json();
+      if (data.routes && data.routes[0]) {
+        const coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+        setRoute(coords);
+      }
+    } catch (err) {
+      console.error('Routing failed', err);
+    }
+  };
+
+  const safeComplaints = useMemo(() => {
+    if (complaints && complaints.length > 0) return complaints;
+    return [
+      { id: '1', title: 'Pothole on Main St', latitude: 19.0760, longitude: 72.8777, priorityLevel: 'High', status: 'Pending', issueType: 'Roads' },
+      { id: '2', title: 'Streetlight out', latitude: 19.0800, longitude: 72.8800, priorityLevel: 'Medium', status: 'In Progress', issueType: 'Streetlight' },
+      { id: '3', title: 'Garbage pile', latitude: 19.0710, longitude: 72.8710, priorityLevel: 'Critical', status: 'Pending', issueType: 'Waste' }
+    ];
+  }, [complaints]);
+
+  const filteredComplaints = useMemo(() => {
+    return safeComplaints.filter(c => {
+      if (!c.latitude || !c.longitude) return false;
+      if (category !== 'All' && !(c.issueType || '').toLowerCase().includes(category.toLowerCase())) return false;
+      if (radius < 5000) {
+        const dist = getDistance(userLoc.latitude, userLoc.longitude, c.latitude, c.longitude);
+        if (dist > radius) return false;
+      }
+      return true;
+    });
+  }, [safeComplaints, category, radius, userLoc]);
+
+  const heatmapPoints = useMemo(() => filteredComplaints.map(c => [c.latitude, c.longitude, c.priorityLevel === 'High' || c.priorityLevel === 'Critical' ? 1.0 : 0.5]), [filteredComplaints]);
+
+  const civicStats = useMemo(() => {
+    const open = filteredComplaints.filter(c => ['Pending', 'Assigned', 'In Progress'].includes(c.status)).length;
+    const resolved = filteredComplaints.filter(c => c.status === 'Resolved').length;
+    const critical = filteredComplaints.filter(c => c.priorityLevel === 'High' || c.priorityLevel === 'Critical').length;
+    const total = filteredComplaints.length;
+    const score = total > 0 ? Math.round((resolved / total) * 100) : 100;
+    return { score, open, resolved, critical };
+  }, [filteredComplaints]);
+
+  return <div className="screen map-screen">
+    <div className="map-header">
+      <button className="back-button" onClick={onBack}><ArrowLeft size={20} /></button>
+      <div><span className="section-kicker">Civic map 2.0</span><strong>Nearby issues</strong></div>
+    </div>
+    
+    {locErr && <div className="map-alert">Location access denied. Showing default area.</div>}
+    
+    <div className="map-wrap" style={{ position: 'relative', flex: 1, minHeight: '600px', height: 'calc(100vh - 62px)' }}>
+      
+      {/* Floating Controls Overlay */}
+      <div className="map-controls-overlay">
+        <div className="map-controls-top">
+          <div className="map-glass-panel layer-switcher">
+            {Object.keys(MAP_LAYERS).map(type => (
+              <button key={type} className={mapType === type ? 'active' : ''} onClick={() => setMapType(type)}>
+                {type === 'Street' ? <MapPin size={14}/> : type === 'Terrain' ? <Landmark size={14}/> : type === 'Dark' ? <Moon size={14}/> : <Globe2 size={14}/>}
+                {type}
+              </button>
+            ))}
+          </div>
+
+          <div className="civic-score-card">
+            <div className="score-main">
+              <strong>{civicStats.score}</strong>
+              <span>Civic Score</span>
+            </div>
+            <div className="score-details">
+              <div><span className="dot amber"/> {civicStats.open} Open</div>
+              <div><span className="dot green"/> {civicStats.resolved} Resolved</div>
+              <div><span className="dot red"/> {civicStats.critical} Critical</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="map-controls-bottom">
+          <div className="map-tools-row">
+            <div className="map-glass-panel filter-chips">
+              {['All', 'Roads', 'Streetlight', 'Waste', 'Water'].map(cat => (
+                <button key={cat} className={category === cat ? 'active' : ''} onClick={() => setCategory(cat)}>{cat}</button>
+              ))}
+            </div>
+            
+            <button className={`map-glass-panel heatmap-toggle ${isHeatmap ? 'active' : ''}`} onClick={() => setIsHeatmap(!isHeatmap)}>
+              <Flame size={16} /> Heatmap {isHeatmap ? 'On' : 'Off'}
+            </button>
+          </div>
+
+          <div className="map-glass-panel radius-slider">
+            <label>Radius: {radius >= 1000 ? `${radius/1000}km` : `${radius}m`}</label>
+            <input type="range" min="500" max="5000" step="500" value={radius} onChange={(e) => setRadius(Number(e.target.value))} />
+          </div>
+        </div>
+      </div>
+
+      <button className="map-fab-location" onClick={() => setFlyTrigger(f => f + 1)}>
+        <Compass size={22} />
+      </button>
+
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1 }}>
+        {mapMounted && (
+          <MapContainer center={[userLoc.latitude, userLoc.longitude]} zoom={14} style={{ height: '100%', width: '100%' }} zoomControl={false} scrollWheelZoom={true}>
+            <MapInvalidator />
+            <TileLayer url={MAP_LAYERS[mapType].url} attribution={MAP_LAYERS[mapType].attribution} />
+            <FlyToUser coords={userLoc} trigger={flyTrigger} />
+            
+            {/* Current Location Marker */}
+            <Marker position={[userLoc.latitude, userLoc.longitude]} icon={createPremiumIcon('#2563eb')}>
+              <Popup>You are here</Popup>
+            </Marker>
+
+            {route && <Polyline positions={route} pathOptions={{ color: '#2563eb', weight: 5, opacity: 0.7, dashArray: '10, 10' }} />}
+            
+            {isHeatmap ? (
+              <HeatmapLayer points={heatmapPoints} />
+            ) : (
+              <MarkerClusterGroup chunkedLoading maxClusterRadius={45} showCoverageOnHover={false}>
+                {filteredComplaints.map(c => (
+                  <Marker key={c.id} position={[c.latitude, c.longitude]} icon={createPremiumIcon(getSeverityColor(c))} eventHandlers={{ click: () => fetchRoute(c.latitude, c.longitude) }}>
+                    <Popup className="premium-popup" onClose={() => setRoute(null)}>
+                      <div className="popup-inner">
+                        {c.image && <img src={c.image} alt={c.title} loading="lazy" />}
+                        <div className="popup-content">
+                          <span className="popup-status" style={{ color: getSeverityColor(c) }}>{c.status}</span>
+                          <h3>{c.title}</h3>
+                          <div className="popup-meta">
+                            <span><ShieldCheck size={12}/> {c.priorityLevel}</span>
+                            <span><MapPin size={12}/> {Math.round(getDistance(userLoc.latitude, userLoc.longitude, c.latitude, c.longitude))}m away</span>
+                          </div>
+                          <button className="secondary-button popup-btn" onClick={() => onDetail(c)}>Details <ArrowUpRight size={14}/></button>
+                        </div>
+                      </div>
+                    </Popup>
+                  </Marker>
+                ))}
+              </MarkerClusterGroup>
+            )}
+          </MapContainer>
+        )}
+      </div>
+    </div>
+  </div>
 }
 
 function Profile({ onLanguage, onNotifications, onTrack, theme, onToggleTheme }) {
